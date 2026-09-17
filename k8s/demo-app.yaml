@@ -1,0 +1,42 @@
+apiVersion: apps/v1 #specifica la versione delle API di Kubernetes da utilizzare per questa risorsa; apps/v1 è il gruppo API stabile dedicato ai controller di gestione dei carichi di lavoro (come Deployment, StatefulSet e DaemonSet).
+kind: Deployment #dichiara il tipo di risorsa da istanziare. Un Deployment gestisce il ciclo di vita dichiarativo delle applicazioni stateless, occupandosi del provisioning dei pod, dei rollout di nuove versioni e del self-healing (riavvio automatico in caso di crash)
+metadata: #blocco contenente i metadati che identificano univocamente la risorsa all'interno del cluster.
+  name: demo-app #assegna il nome identificativo alla risorsa all'interno del cluster.
+  namespace: default #specifica l'ambiente logico di isolamento in cui creare la risorsa
+  labels: #assegna una coppia chiave-valore di etichette al Deployment
+    app: demo-app
+spec: #apre la specifica del comportamento desiderato per il carico di lavoro
+  replicas: 2
+  selector: #stabilisce il criterio con cui il Deployment individua e governa i pod di sua competenza
+    matchLabels: #indica che qualsiasi pod etichettato con app: demo-app farà parte del gruppo gestito da questo Deployment.
+      app: demo-app
+  template: #definisce il template con cui Kubernetes genererà ciascuna delle repliche richieste.
+    metadata:
+      labels:
+        app: demo-app #applica obbligatoriamente l'etichetta app: demo-app su ogni singolo pod generato
+    spec:
+      containers: #definisce la specifica del runtime del pod e l'elenco dei container che devono essere eseguiti all'interno di ciascun pod
+      - name: nginx #assegna il nome al container interno al pod.
+        image: nginx:latest #indica l'immagine Docker da scaricare dal registro pubblico Docker Hub; in questo caso, l'ultima versione del web server NGINX.
+        ports:
+        - containerPort: 80 #documenta che il container NGINX accetta traffico in ingresso sulla porta standard HTTP 80
+        resources: #dichiara i vincoli di allocazione delle risorse hardware (CPU e RAM) sul nodo fisico o virtuale
+          limits: #il tetto massimo consumabile dal container a runtime
+            cpu: "200m"
+            memory: "256Mi"
+          requests: #la soglia minima garantita dallo scheduler Kubernetes per posizionare il pod su un nodo del cluster
+            cpu: "100m"
+            memory: "128Mi"
+---
+apiVersion: v1 #dichiara la versione dell'API per le risorse del gruppo fondamentale (Core API Group), di cui i Service fanno parte.
+kind: Service #definisce una risorsa di tipo Service. Agisce come astrazione di rete e bilanciatore di carico interno (L4), assegnando un unico IP virtuale stabile e un nome DNS ai pod sottostanti, i quali possiedono IP dinamici ed effimeri.
+metadata:
+  name: demo-service #nome logico del servizio
+  namespace: default #assegna il servizio allo stesso namespace dell'applicazione target.
+spec:
+  selector:
+    app: demo-app #Qualsiasi pacchetto inviato a demo-service verrà inoltrato e bilanciato automaticamente tra tutti i pod che possiedono l'etichetta app: demo-app e si trovano in stato Ready
+  ports:
+    - protocol: TCP
+      port: 80 #la porta su cui il Service rimane in ascolto all'interno del cluster
+      targetPort: 80 #la porta interna del container verso cui il traffico in ingresso viene reindirizzato
