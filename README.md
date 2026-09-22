@@ -105,7 +105,7 @@ Incollare le configurazioni (sostituendo la propria chiave Google Gemini):
 GOOGLE_API_KEY=inserire_la_chiave_gemini
 PROMETHEUS_ENDPOINT=http://127.0.0.1:9090
 Salvare premendo Ctrl + O, poi Invio, e chiudere con Ctrl + X.
-```
+
 
 7. Esecuzione del sistema (Uso quotidiano)
 Ad ogni sessione di lavoro servono due terminali:
@@ -116,7 +116,7 @@ Terminale 1: Tunnel verso Prometheus (da lasciare aperto)
 ```powershell
 kubectl port-forward --address 0.0.0.0 svc/prometheus-kube-prometheus-prometheus -n monitoring 9090:9090
 ```
-
+ 
 Terminale 2: Avvio dell'Agente
 ```powershell
 cd ~/AgentLab
