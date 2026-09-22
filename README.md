@@ -68,11 +68,10 @@ kubectl get pods -n monitoring
 Creare e applicare l'applicazione di esempio che l'agente dovrà monitorare:
 
 ```powershell
-# Creare il deployment e il service con 2 repliche
-kubectl create deployment demo-app --image=nginx --replicas=2
-kubectl expose deployment demo-app --port=80 --name=demo-service
+# Creare le applicazioni con il comando:
+kubectl apply -f ~/AgentLab/workloads.yaml
 
-# Verificare che i due pod siano attivi
+# Verificare i due pod siano attivi
 kubectl get pods
 ```
 
@@ -108,10 +107,16 @@ Salvare premendo Ctrl + O, poi Invio, e chiudere con Ctrl + X.
 
 
 7. Esecuzione del sistema (Uso quotidiano)
+
+Prima dell'esecuzione, avviare un'istanza MongoDb in Docker:
+
+```powershell
+docker run -d --name thesis-mongo -p 27017:27017 mongo:latest
+```
+
 Ad ogni sessione di lavoro servono due terminali:
 
 Terminale 1: Tunnel verso Prometheus (da lasciare aperto)
-
 
 ```powershell
 kubectl port-forward --address 0.0.0.0 svc/prometheus-kube-prometheus-prometheus -n monitoring 9090:9090
