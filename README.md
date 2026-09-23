@@ -69,7 +69,7 @@ Creare e applicare l'applicazione di esempio che l'agente dovrà monitorare:
 
 ```powershell
 # Creare le applicazioni con il comando:
-kubectl apply -f ~/AgentLab/workloads.yaml
+kubectl apply -f ~/AgentLab/k8s/workloads.yaml
 
 # Verificare i due pod siano attivi
 kubectl get pods
@@ -121,7 +121,7 @@ Terminale 1: Tunnel verso Prometheus (da lasciare aperto)
 ```powershell
 kubectl port-forward --address 0.0.0.0 svc/prometheus-kube-prometheus-prometheus -n monitoring 9090:9090
 ```
- 
+
 Terminale 2: Avvio dell'Agente
 ```powershell
 cd ~/AgentLab

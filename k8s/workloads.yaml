@@ -1,0 +1,106 @@
+# 1. Applicazione Web Frontend (demo-app): 2 Repliche
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-app
+  namespace: default
+  labels:
+    app: demo-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: demo-app
+  template:
+    metadata:
+      labels:
+        app: demo-app
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "64Mi"
+          limits:
+            cpu: "100m"
+            memory: "128Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-service
+  namespace: default
+spec:
+  selector:
+    app: demo-app
+  ports:
+  - port: 80
+    targetPort: 80
+---
+# 2. Worker CPU-Intensive (worker-app): 1 Replica, calcolo matematico in loop
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-app
+  namespace: default
+  labels:
+    app: worker-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: worker-app
+  template:
+    metadata:
+      labels:
+        app: worker-app
+    spec:
+      containers:
+      - name: cpu-worker
+        image: busybox:latest
+        command: ["sh", "-c"]
+        args:
+        - "while true; do echo 'scale=1000; 4*a(1)' | bc -l > /dev/null 2>&1; sleep 0.1; done"
+        resources:
+          requests:
+            cpu: "150m"
+            memory: "64Mi"
+          limits:
+            cpu: "300m"
+            memory: "128Mi"
+---
+# 3. Cache & Disk Writer (cache-app): 1 Replica, scrive log su disco e tiene memoria
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cache-app
+  namespace: default
+  labels:
+    app: cache-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cache-app
+  template:
+    metadata:
+      labels:
+        app: cache-app
+    spec:
+      containers:
+      - name: cache-service
+        image: busybox:latest
+        command: ["sh", "-c"]
+        args:
+        - "while true; do dd if=/dev/zero of=/tmp/cache_test.log bs=1M count=1 oflag=append conv=notrunc; sleep 2; done"
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "128Mi"
+          limits:
+            cpu: "100m"
+            memory: "256Mi"

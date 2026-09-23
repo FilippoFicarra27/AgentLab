@@ -1,2 +1,5 @@
 .env
 .venv
+src/_pycache_
+src/agents/_pycache_
+src/tools/_pycache_
