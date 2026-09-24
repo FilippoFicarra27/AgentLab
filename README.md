@@ -128,3 +128,17 @@ cd ~/AgentLab
 source .venv/bin/activate
 python3 main.py
 ```
+Nel caso in cui non si voglia attivare l'agente eseguendo il main.py, ma direttamente da LangSmit:
+    1. Inserire nel file .env le seguenti informazioni:
+    ```powershell
+    LANGCHAIN_TRACING_V2=true
+    LANGCHAIN_ENDPOINT="https://api.smith.langchain.com"
+    LANGCHAIN_API_KEY=La_propria_API_KEY
+    LANGCHAIN_PROJECT="AgentLab"
+    ```
+    2.Digitare su terminale wsl:
+    ```powershell
+    cd ~/AgentLab
+    source .venv/bin/activate
+    langgraph dev
+    ```

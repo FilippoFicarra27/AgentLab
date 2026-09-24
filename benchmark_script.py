@@ -79,7 +79,9 @@ def parse_metric_by_pod(prom_json):
                 except ValueError:
                     data_map[pod] = 0.0
 
-    print("metriche scoperte per il p od: ")
+    print("metriche scoperte per il pod: ")
+    print(data_map)
+    print("\n")
     return data_map
 
 def main():

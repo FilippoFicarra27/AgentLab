@@ -12,6 +12,10 @@ from src.agents.discovery import discovery_node
 #su Prometheus e il report finale
 from src.agents.evaluator import evaluator_node
 
+import os
+import sys
+import asyncio
+
 def build_recon_graph(tools: list): #i tool vengono recuperati dal main.py
     workflow = StateGraph(ReconState) #creazione del workflow. Tutti i nodi condividono lo stato comune 
     
@@ -30,3 +34,27 @@ def build_recon_graph(tools: list): #i tool vengono recuperati dal main.py
     workflow.add_edge("evaluator", END)
     
     return workflow.compile()
+
+is_platform = (
+    os.getenv("LANGGRAPH_API") is not None 
+    or os.getenv("LANGGRAPH_PORT") is not None 
+    or any("langgraph" in arg for arg in sys.argv)
+)
+
+if is_platform:
+    print("Compilazione per LangGraph Studio / Dev Server.")
+    from src.tools.mcp_manager import load_mcp_tools
+    
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+    _, _studio_tools = loop.run_until_complete(load_mcp_tools())
+    
+    
+    compiled_graph = build_recon_graph(_studio_tools)
+else:
+    
+    compiled_graph = None

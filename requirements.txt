@@ -9,3 +9,5 @@ mcp
 pydantic
 mcp-kubernetes-server
 kubernetes
+langgraph-cli[inmem]>=0.1.0
+langsmith>=0.1.0
