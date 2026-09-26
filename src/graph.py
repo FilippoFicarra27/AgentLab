@@ -27,7 +27,7 @@ def build_recon_graph(tools: list, is_platform: bool = False):
         return await persister_node(state, tools)
 
     async def run_advisor(state: ReconState):
-        return await sre_advisor_node(state)
+        return await sre_advisor_node(state, tools)
 
     workflow.add_node("discovery", run_discovery)
     workflow.add_node("evaluator", run_evaluator)

@@ -2,7 +2,7 @@ import json
 from mcp.server.fastmcp import FastMCP
 from kubernetes import client, config
 from pymongo import MongoClient, ASCENDING, DESCENDING
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 # Inizializza il server MCP con il nome "kubernetes-mcp-server"
 mcp = FastMCP("kubernetes-mcp-server")
 
@@ -71,6 +71,64 @@ def save_metrics_to_mongodb(app_name: str, metrics: dict, pods: list = None, raw
         return f"Dati salvati con successo per {app_name}, ID: {res.inserted_id}"
     except Exception as e:
         return f"Errore MongoDB: {str(e)}"
+@mcp.tool()
+def get_historical_metrics(app_name: str, hours: int = 0, days: int = 0) -> str:
+    """
+    Recupera lo storico delle metriche salvate su MongoDB per una specifica applicazione
+    nelle ultime N ore o negli ultimi N giorni per analizzare trend temporali.
+    - app_name: nome dell'applicazione (es. 'cache-app', 'worker-app', 'demo-app')
+    - hours: intervallo in ore da consultare nel passato (es. 2, 6, 12).
+    - days: intervallo in giorni da consultare nel passato (es. 1, 2, 7). Se specificato, ha la precedenza o si somma alle ore.
+    """
+    try:
+        client = MongoClient("mongodb://localhost:27017/")
+        db = client["k8s_observability"]
+        collection = db["agent_metrics"]
+        
+        # Se non viene passato nulla, default a 3 ore
+        total_hours = int(hours) + (int(days) * 24)
+        if total_hours <= 0:
+            total_hours = 3
+
+        since_time = datetime.now(timezone.utc) - timedelta(hours=total_hours)
+        
+        cursor = collection.find(
+            {
+                "app_name": app_name,
+                "timestamp": {"$gte": since_time}
+            },
+            {"_id": 0, "timestamp": 1, "metrics": 1, "pod_count": 1}
+        ).sort("timestamp", ASCENDING)
+        
+        records = []
+        for r in cursor:
+            ts = r.get("timestamp")
+            records.append({
+                "timestamp": ts.isoformat() if isinstance(ts, datetime) else str(ts),
+                "metrics": r.get("metrics", {}),
+                "pod_count": r.get("pod_count", 0)
+            })
+            
+        if not records:
+            return f"Nessun dato storico trovato per '{app_name}' nelle ultime {total_hours} ore ({days} giorni)."
+            
+        # Se ci sono molti record (ad es. esecuzioni frequenti su più giorni),
+        # limitiamo l'output o facciamo campionamento per non sforare la context window
+        if len(records) > 50:
+            step = len(records) // 30
+            records = records[::step]
+
+        return json.dumps(records)
+    except Exception as e:
+        return f"Errore lettura archivio MongoDB: {str(e)}"
+
+
+
+
+
+
+
+
 
 #Ora come ora questi tool non vengono forniti all'agente. Ma li mantengo per estensioni future
 
