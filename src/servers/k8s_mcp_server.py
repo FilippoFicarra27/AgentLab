@@ -61,7 +61,7 @@ def save_metrics_to_mongodb(app_name: str, metrics: dict, pods: list = None, raw
         pod_list = pods or []
         doc = {
             "app_name": app_name,
-            "timestamp": datetime.now(timezone.utc),
+            "timestamp": datetime.now().astimezone(),
             "pods": pod_list,
             "pod_count": len(pod_list),
             "metrics": metrics_dict,

@@ -1,7 +1,8 @@
 import os
 import json
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+from langgraph.types import interrupt
 from src.state import ReconState
 
 ADVISOR_SYSTEM_PROMPT = """Sei un SRE Advisor esperto in Kubernetes. 
@@ -26,14 +27,30 @@ async def sre_advisor_node(state: ReconState) -> dict:
     
     metrics = state.get("metrics_summary", {})
     mapping = state.get("app_mapping", {})
-    query = (state.get("user_query") or "").strip()
+
+    user_input = interrupt("Inserisci una richiesta per l'SRE Advisor (o conferma a vuoto per uscire):")
     
+    # Recupera l'input
+    query = ""
+    if isinstance(user_input, str):
+        query = user_input.strip()
+    elif isinstance(user_input, dict):
+        query = str(user_input.get("user_query") or user_input.get("query") or "").strip()
     
+    # Fallback sullo stato se non è stato passato tramite il valore di resume
     if not query:
-        print("\n-> [SRE ADVISOR] Nessuna richiesta inoltrata dall'operatore. Conclusione sessione.")
+        query = (state.get("user_query") or "").strip()
+
+    # Se l'utente ha premuto solo INVIO o ha inviato stringa vuota:
+    if not query:
+        print("-> [SRE ADVISOR] Nessuna richiesta inserita. Conclusione a costo zero.")
+        msg = AIMessage(content="Nessuna richiesta formulata dall'operatore. Sessione terminata.")
         return {
-            "advisor_response": "Nessuna interrogazione inserita. Workflow terminato."
+            "user_query": "",
+            "advisor_response": msg.content,
+            "messages": [msg]
         }
+    
     prompt = [
         SystemMessage(content=ADVISOR_SYSTEM_PROMPT),
         HumanMessage(

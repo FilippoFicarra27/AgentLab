@@ -2,7 +2,7 @@ import asyncio
 from dotenv import load_dotenv
 from src.tools.mcp_manager import load_mcp_tools
 from src.graph import build_recon_graph
-
+from langgraph.types import Command
 load_dotenv()
 
 async def run():
@@ -39,10 +39,7 @@ async def run():
     print("="*60)
     
    
-    app.update_state(thread_config, {"user_query": user_input})
-    
-    # Invocando con None e lo stesso thread_id, il grafo sblocca l'interruzione e fa girare advisor
-    await app.ainvoke(None, config=thread_config)
+    await app.ainvoke(Command(resume=user_input), config=thread_config)
 
 if __name__ == "__main__":
     asyncio.run(run())
