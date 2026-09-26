@@ -8,33 +8,41 @@ load_dotenv()
 async def run():
     print("Connessione ai server MCP in corso...")
     client, tools = await load_mcp_tools()
-    
     print(f"Tool caricati con successo ({len(tools)} disponibili):")
     for t in tools:
         print(f"  - {t.name}")
-
     app = build_recon_graph(tools)
+    
+    # ID thread necessario a MemorySaver per recuperare lo stato congelato
+    thread_config = {"configurable": {"thread_id": "session-k8s-sre"}}
     
     initial_state = {
         "target_namespace": "default",
         "discovered_pods": [],
+        "app_mapping": {},
         "metrics_summary": {},
+        "raw_prometheus_responses": {},
         "final_report": "",
+        "user_query": None,
+        "advisor_response": None,
         "messages": []
     }
     
-    result = await app.ainvoke(
-    initial_state,
-    config={
-        "run_name": "Full-Recon-Pipeline",
-        "tags": ["kind-cluster", "thesis-experiment", "gemini-2.5-flash"]
-    }
-)
+    print("\n--- AVVIO PIPELINE: DISCOVERY -> EVALUATION -> PERSISTENCE ---")
+    # Il flusso esegue fino al persister, salva su Mongo e si congela prima di advisor
+    await app.ainvoke(initial_state, config=thread_config)
     
+    # Controllo interattivo: l'utente scrive o preme semplicemente invio
     print("\n" + "="*60)
-    print("REPORT FINALE DI RICOGNIZIONE:")
+    print("Dati persistiti su MongoDB con successo.")
+    user_input = input("Inserisci una richiesta per l'SRE Advisor (o premi solo INVIO per uscire): ").strip()
     print("="*60)
-    print(result.get("final_report", "Nessun report generato."))
+    
+   
+    app.update_state(thread_config, {"user_query": user_input})
+    
+    # Invocando con None e lo stesso thread_id, il grafo sblocca l'interruzione e fa girare advisor
+    await app.ainvoke(None, config=thread_config)
 
 if __name__ == "__main__":
     asyncio.run(run())
