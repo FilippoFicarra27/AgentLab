@@ -63,6 +63,12 @@ async def evaluator_node(state: ReconState, tools: list) -> dict:
     ]
     
     response = await llm_with_tools.ainvoke(prompt)
+
+    usage = getattr(response, "usage_metadata", None) or response.response_metadata.get("usage_metadata", {})
+    input_tok = usage.get("input_tokens", 0)
+    output_tok = usage.get("output_tokens", 0)
+
+
     raw_responses = {}
     
     if response.tool_calls:
@@ -111,5 +117,8 @@ async def evaluator_node(state: ReconState, tools: list) -> dict:
         "app_mapping": app_mapping,
         "raw_prometheus_responses": raw_responses,
         "metrics_summary": metrics_summary,
-        "messages": [response]
+        "messages": [response],
+        "prompt_tokens": state.get("prompt_tokens", 0) + input_tok,
+        "completion_tokens": state.get("completion_tokens", 0) + output_tok,
+        "total_tokens": state.get("total_tokens", 0) + (input_tok + output_tok)
     } 

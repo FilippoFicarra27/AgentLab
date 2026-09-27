@@ -19,7 +19,24 @@ Nel caso in cui venga effettuata una richiesta di informazioni sull'andamento te
   trend storici, variazioni o confronti con le ore precedenti (es. "ultime 2 ore", "come è cambiato").
   In generale, può essere chiesto un qualunque intervallo temporale, sia di ore, ma anche di giorni, mesi (es. "ultimi 2 giorni", "ultimo mese", "ultimi 2 mesi").
   Per domande sullo stato istantaneo attuale, rispondi direttamente usando il contesto fornito senza invocare il tool.
+  Se l'utente non specifica l'applicazione, usa il tool 'get_historical_metrics' per ciascuna applicazione scoperta nella topologia.
 """
+def extract_clean_text(content) -> str:
+    """Estrae la stringa pura da response.content anche se è una lista di dizionari."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, dict) and "text" in item:
+                parts.append(item["text"])
+            elif hasattr(item, "text"):
+                parts.append(item.text)
+            else:
+                parts.append(str(item))
+        return " ".join(parts).strip()
+    return str(content)
+
 def extract_mcp_text(tool_output) -> str:
     if isinstance(tool_output, list) and len(tool_output) > 0:
         first = tool_output[0]
@@ -32,7 +49,7 @@ def extract_mcp_text(tool_output) -> str:
     return str(tool_output)
 
 async def sre_advisor_node(state: ReconState, tools: list) -> dict:
-    print("\n-> [NODO 4: SRE ADVISOR] In attesa di input utente...")
+ 
     user_input = interrupt("Inserisci una richiesta per l'SRE Advisor (o conferma a vuoto per uscire):")
     
     query = ""
@@ -45,15 +62,16 @@ async def sre_advisor_node(state: ReconState, tools: list) -> dict:
         query = (state.get("user_query") or "").strip()
 
     if not query:
-        print("-> [SRE ADVISOR] Nessuna richiesta inserita. Conclusione a costo zero.")
-        msg = AIMessage(content="Nessuna richiesta formulata dall'operatore. Sessione terminata.")
+        print("\n-> [SRE ADVISOR] Nessuna richiesta inoltrata dall'operatore. Conclusione a costo zero.")
         return {
             "user_query": "",
-            "advisor_response": msg.content,
-            "messages": [msg]
+            "advisor_response": "Nessuna interrogazione inserita. Workflow terminato.",
+            "prompt_tokens": state.get("prompt_tokens", 0),
+            "completion_tokens": state.get("completion_tokens", 0),
+            "total_tokens": state.get("total_tokens", 0)
         }
 
-    print(f"-> [SRE ADVISOR] Elaborazione richiesta: '{query}'")
+    print(f"\n-> [NODO 4: SRE ADVISOR] Elaborazione richiesta: '{query}'")
     
     api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
     llm = ChatGoogleGenerativeAI(
@@ -63,7 +81,6 @@ async def sre_advisor_node(state: ReconState, tools: list) -> dict:
         max_retries=5
     )
     
-    # Binding del solo tool storico
     history_tools = [t for t in tools if t.name == "get_historical_metrics"]
     llm_with_tools = llm.bind_tools(history_tools) if history_tools else llm
     
@@ -83,7 +100,10 @@ async def sre_advisor_node(state: ReconState, tools: list) -> dict:
     
     response = await llm_with_tools.ainvoke(chat_messages)
     
-    # Se il modello decide che serve consultare lo storico su MongoDB:
+    usage = getattr(response, "usage_metadata", None) or response.response_metadata.get("usage_metadata", {})
+    prompt_tokens = usage.get("input_tokens", 0)
+    completion_tokens = usage.get("output_tokens", 0)
+    
     if response.tool_calls and history_tools:
         target_tool = history_tools[0]
         chat_messages.append(response)
@@ -102,13 +122,19 @@ async def sre_advisor_node(state: ReconState, tools: list) -> dict:
                     )
                 )
         
-        # Seconda invocazione per redigere l'analisi sul trend
         response = await llm.ainvoke(chat_messages)
+        usage2 = getattr(response, "usage_metadata", None) or response.response_metadata.get("usage_metadata", {})
+        prompt_tokens += usage2.get("input_tokens", 0)
+        completion_tokens += usage2.get("output_tokens", 0)
 
-    print(f"\n[Risposta SRE Advisor]:\n{response.content}\n")
+    clean_text = extract_clean_text(response.content)
+    print(f"\n[Risposta SRE Advisor]:\n{clean_text}\n")
     
     return {
         "user_query": query,
-        "advisor_response": response.content,
-        "messages": [response]
+        "advisor_response": clean_text,
+        "messages": [AIMessage(content=clean_text)],
+        "prompt_tokens": state.get("prompt_tokens", 0) + prompt_tokens,
+        "completion_tokens": state.get("completion_tokens", 0) + completion_tokens,
+        "total_tokens": state.get("total_tokens", 0) + (prompt_tokens + completion_tokens)
     }

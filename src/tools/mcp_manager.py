@@ -11,6 +11,9 @@ def get_mcp_config():
     python_env["PYTHONUNBUFFERED"] = "1"
     python_env["PYTHONPATH"] = base_dir
 
+    prom_env = dict(os.environ)
+    prom_env["PROMETHEUS_BASE_URL"] = "http://127.0.0.1:9090"
+
     return {
         #Server MCP Kubernetes nativo
         "kubernetes": {
@@ -24,10 +27,7 @@ def get_mcp_config():
             "transport": "stdio",
             "command": "npx",
             "args": ["-y", "prometheus-mcp-server"],
-            "env": {
-                "PROMETHEUS_BASE_URL": "http://127.0.0.1:9090",
-                "PATH": os.environ.get("PATH", "")
-            }
+            "env": prom_env
         }
     }
 

@@ -3,7 +3,7 @@ from mcp.server.fastmcp import FastMCP
 from kubernetes import client, config
 from pymongo import MongoClient, ASCENDING, DESCENDING
 from datetime import datetime, timezone, timedelta
-# Inizializza il server MCP con il nome "kubernetes-mcp-server"
+
 mcp = FastMCP("kubernetes-mcp-server")
 
 def init_k8s():
@@ -54,7 +54,6 @@ def save_metrics_to_mongodb(app_name: str, metrics: dict, pods: list = None, raw
         collection = db["agent_metrics"]
         collection.create_index([("app_name", ASCENDING), ("timestamp", DESCENDING)])
 
-        # Conversione di sicurezza se arrivano serializzati in stringa
         metrics_dict = json.loads(metrics) if isinstance(metrics, str) else (metrics or {})
         raw_dict = json.loads(raw_prometheus_responses) if isinstance(raw_prometheus_responses, str) else (raw_prometheus_responses or {})
 
@@ -85,12 +84,11 @@ def get_historical_metrics(app_name: str, hours: int = 0, days: int = 0) -> str:
         db = client["k8s_observability"]
         collection = db["agent_metrics"]
         
-        # Se non viene passato nulla, default a 3 ore
-        total_hours = int(hours) + (int(days) * 24)
+        total_hours = int(float(hours)) + (int(float(days)) * 24)
         if total_hours <= 0:
             total_hours = 3
 
-        since_time = datetime.now(timezone.utc) - timedelta(hours=total_hours)
+        since_time = datetime.now().astimezone() - timedelta(hours=total_hours)
         
         cursor = collection.find(
             {
@@ -112,8 +110,6 @@ def get_historical_metrics(app_name: str, hours: int = 0, days: int = 0) -> str:
         if not records:
             return f"Nessun dato storico trovato per '{app_name}' nelle ultime {total_hours} ore ({days} giorni)."
             
-        # Se ci sono molti record (ad es. esecuzioni frequenti su più giorni),
-        # limitiamo l'output o facciamo campionamento per non sforare la context window
         if len(records) > 50:
             step = len(records) // 30
             records = records[::step]
@@ -121,13 +117,6 @@ def get_historical_metrics(app_name: str, hours: int = 0, days: int = 0) -> str:
         return json.dumps(records)
     except Exception as e:
         return f"Errore lettura archivio MongoDB: {str(e)}"
-
-
-
-
-
-
-
 
 
 #Ora come ora questi tool non vengono forniti all'agente. Ma li mantengo per estensioni future
