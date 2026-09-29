@@ -1,4 +1,4 @@
-# 1. Applicazione Web Frontend (demo-app): 2 Repliche
+#demo-app: 2 Repliche
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -41,7 +41,7 @@ spec:
   - port: 80
     targetPort: 80
 ---
-# 2. Worker CPU-Intensive (worker-app): 1 Replica, calcolo matematico in loop
+#worker-app: 1 Replica, calcolo matematico in loop
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -73,7 +73,7 @@ spec:
             cpu: "300m"
             memory: "128Mi"
 ---
-# 3. Cache & Disk Writer (cache-app): 1 Replica, scrive log su disco e tiene memoria
+#cache-app: 1 Replica, scrive log su disco e tiene memoria
 apiVersion: apps/v1
 kind: Deployment
 metadata:
