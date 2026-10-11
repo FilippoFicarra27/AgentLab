@@ -1,5 +1,5 @@
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import requests
 from kubernetes import client, config
 from pymongo import MongoClient, ASCENDING, DESCENDING
@@ -9,7 +9,7 @@ from tabulate import tabulate
 PROMETHEUS_URL = "http://127.0.0.1:9090/api/v1/query"
 MONGO_URI = "mongodb://localhost:27017/"
 DB_NAME = "k8s_observability"
-COLLECTION_NAME = "metrics_history"
+COLLECTION_NAME = "agent_metrics"
 NAMESPACE = "default"
 
 def init_mongo():
@@ -83,6 +83,119 @@ def parse_metric_by_pod(prom_json):
     print(data_map)
     print("\n")
     return data_map
+
+def query_prometheus_direct(query: str):
+    """Query Prometheus di fallback per lo script deterministico."""
+    data = query_prometheus(query)
+    if data.get("status") == "success":
+        return data.get("data", {}).get("result", [])
+    return []
+
+def query_mongo_historical(app_name: str, hours: int = 2):
+    """Interroga lo storico reale su MongoDB per il calcolo del delta percentuale (Q7)."""
+    try:
+        client = MongoClient("mongodb://localhost:27017/")
+        db = client["k8s_observability"]
+        collection = db["agent_metrics"]
+        since_time = datetime.now(timezone.utc) - timedelta(hours=hours)
+        
+        cursor = collection.find(
+            {"app_name": app_name, "timestamp": {"$gte": since_time}},
+            {"_id": 0, "timestamp": 1, "metrics": 1}
+        ).sort("timestamp", ASCENDING)
+        
+        return list(cursor)
+    except Exception:
+        return []
+
+def deterministic_oracle_answer(q_id: int, mapping: dict, metrics: dict) -> str:
+    """Calcola la risposta deterministica (Ground Truth) in modo completamente dinamico."""
+    if not mapping or not metrics:
+        return "Dati dello snapshot non disponibili"
+
+    # Q1
+    if q_id == 1:
+        top = max(metrics.items(), key=lambda x: x[1].get("cpu_cores", 0.0))
+        return f"{top[0]} ({top[1].get('cpu_cores', 0.0):.4f} cores)"
+
+    # Q2
+    elif q_id == 2:
+        top_replicas_app = max(mapping.items(), key=lambda x: len(x[1]))[0]
+        val = metrics.get(top_replicas_app, {}).get("memory_mb", 0.0)
+        return f"{top_replicas_app}: {val:.2f} MB"
+
+    # Q3
+    elif q_id == 3:
+        writers = {k: v.get("disk_write_bps", 0.0) for k, v in metrics.items() if v.get("disk_write_bps", 0.0) > 0}
+        if writers:
+            top = max(writers.items(), key=lambda x: x[1])
+            return f"{top[0]} ({top[1]:.2f} B/s)"
+        return "Nessuna applicazione presenta scritture attive su disco"
+
+    # Q4
+    elif q_id == 4:
+        top_app, pods = max(mapping.items(), key=lambda x: len(x[1]))
+        return f"App: {top_app} | Repliche: {len(pods)} | Pods: {pods}"
+
+    # Q5
+    elif q_id == 5:
+        threshold = 10240.0
+        anomalies = {k: v.get("network_rx_bps", 0.0) for k, v in metrics.items() if v.get("network_rx_bps", 0.0) > threshold}
+        if anomalies:
+            formatted = ", ".join([f"{k} ({v/1024.0:.2f} KB/s)" for k, v in anomalies.items()])
+            return f"Applicazioni sopra soglia: {formatted}"
+        return "Nessuna applicazione supera 10 KB/s in ricezione"
+
+    # Q6
+    elif q_id == 6:
+        scores = {}
+        for app, m in metrics.items():
+            cpu = m.get("cpu_cores", 0.0)
+            mem = m.get("memory_mb", 0.0)
+            disk = m.get("disk_write_bps", 0.0)
+            score = (0.50 * cpu) + (0.25 * (mem / 128.0)) + (0.25 * (disk / 1048576.0))
+            scores[app] = round(score, 4)
+        top = max(scores.items(), key=lambda x: x[1])
+        return f"Punteggio più alto: {top[0]} (Score: {top[1]}) | Tutti: {scores}"
+
+    # Q7
+    elif q_id == 7:
+        top_mem_app = max(metrics.items(), key=lambda x: x[1].get("memory_mb", 0.0))[0]
+        current_mem = metrics.get(top_mem_app, {}).get("memory_mb", 0.0)
+        history = query_mongo_historical(top_mem_app, hours=2)
+        
+        if len(history) >= 2:
+            old_mem = history[0].get("metrics", {}).get("memory_mb", 0.0)
+            if old_mem > 0:
+                delta_pct = ((current_mem - old_mem) / old_mem) * 100.0
+                return f"App: {top_mem_app} | Delta: {delta_pct:+.2f}% (da {old_mem:.2f} a {current_mem:.2f} MB)"
+        return f"App: {top_mem_app} (Memoria attuale: {current_mem:.2f} MB) | Dati storici insufficienti per calcolo delta"
+
+    # Q8
+    elif q_id == 8:
+        top_cpu_app = max(metrics.items(), key=lambda x: x[1].get("cpu_cores", 0.0))[0]
+        used_cpu = metrics.get(top_cpu_app, {}).get("cpu_cores", 0.0)
+        limit_cpu = 0.600
+        sat_pct = (used_cpu / limit_cpu) * 100.0
+        risk = "ELEVATO (throttling probabile)" if sat_pct > 80.0 else "BASSO"
+        return f"App: {top_cpu_app} | Uso: {used_cpu:.4f} cores | Saturazione: {sat_pct:.2f}% | Rischio: {risk}"
+
+    # Q9
+    elif q_id == 9:
+        res = query_prometheus_direct('sum(increase(kube_pod_container_status_restarts_total{namespace="default"}[1h]))')
+        restarts = float(res[0]["value"][1]) if res else 0.0
+        return f"{int(restarts)} riavvii imprevisti rilevati nell'ultima ora"
+
+    # Q10
+    elif q_id == 10:
+        sorted_apps = sorted(metrics.items(), key=lambda x: x[1].get("cpu_cores", 0.0))
+        safest = sorted_apps[0][0]
+        isolate = sorted_apps[-1][0]
+        return f"Co-locare preferibilmente con '{safest}' (minor CPU: {sorted_apps[0][1]['cpu_cores']:.4f} cores) ed ISOLARE da '{isolate}' (maggior CPU: {sorted_apps[-1][1]['cpu_cores']:.4f} cores)"
+
+    return "Domanda non supportata dallo script"
+
+
 
 def main():
     print("=" * 60)

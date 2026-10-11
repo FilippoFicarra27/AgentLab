@@ -3,12 +3,13 @@ from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
 
 class ReconState(TypedDict):
-    target_namespace: str
+    target_namespace: Optional[str]
+    target_model: Optional[str]           
     discovered_pods: List[str]
     app_mapping: Dict[str, List[str]]
     metrics_summary: Dict[str, Any]
     raw_prometheus_responses: Dict[str, Any]
-    final_report: str
+    final_report: Optional[str]
     messages: Annotated[List[AnyMessage], add_messages]
     user_query: Optional[str]
     advisor_response: Optional[str]  

@@ -15,6 +15,8 @@ from src.agents.advisor import sre_advisor_node
 
 def init_state_node(state: ReconState) -> dict:
     return {
+        "target_namespace": state.get("target_namespace", "default"),
+        "target_model": state.get("target_model", "claude-sonnet-5-5"),
         "discovered_pods": [],
         "app_mapping": {},
         "metrics_summary": {},
@@ -25,7 +27,6 @@ def init_state_node(state: ReconState) -> dict:
         "completion_tokens": 0,
         "total_tokens": 0
     }
-
 
 
 def build_recon_graph(tools: list, is_platform: bool = False):

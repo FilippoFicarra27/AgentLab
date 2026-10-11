@@ -1,6 +1,7 @@
 import os
 import json
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage
 from langgraph.types import interrupt
 from src.state import ReconState
@@ -14,22 +15,25 @@ Fornisci raccomandazioni concrete su:
 - Identificazione di carichi anomali o idle
 Basa le risposte esclusivamente sulle metriche reali fornite.
 
-Nel caso in cui venga effettuata una richiesta di informazioni sull'andamento temporale delle metriche raccolte, c'è un tool a disposizione:
-- `get_historical_metrics`: Usalo SE E SOLO SE l'operatore chiede informazioni sull'andamento temporale,
-  trend storici, variazioni o confronti con le ore precedenti (es. "ultime 2 ore", "come è cambiato").
-  In generale, può essere chiesto un qualunque intervallo temporale, sia di ore, ma anche di giorni, mesi (es. "ultimi 2 giorni", "ultimo mese", "ultimi 2 mesi").
-  Per domande sullo stato istantaneo attuale, rispondi direttamente usando il contesto fornito senza invocare il tool.
-  Se l'utente non specifica l'applicazione, usa il tool 'get_historical_metrics' per ciascuna applicazione scoperta nella topologia.
+LINEE GUIDA PER L'USO DEI TOOL:
+- Per domande sullo stato istantaneo attuale ricavabili dallo snapshot fornito, rispondi direttamente senza invocare tool.
+- Hai accesso all'intera suite di strumenti MCP (storico su database `get_historical_metrics`, query Prometheus `prom_query`, ispezione topologia, ecc.).
+- Se la richiesta richiede dati non presenti nello snapshot corrente — come serie temporali storiche, andamenti passati, o verifiche dirette di metriche non campionate (es. riavvii pod, eventi) — seleziona ed esegui autonomamente lo strumento più idoneo tra quelli forniti.
 """
+
 def extract_clean_text(content) -> str:
-    """Estrae la stringa pura da response.content anche se è una lista di dizionari."""
+    """Estrae esclusivamente i blocchi di testo, ignorando thinking o signature."""
     if isinstance(content, str):
         return content
     if isinstance(content, list):
         parts = []
         for item in content:
-            if isinstance(item, dict) and "text" in item:
-                parts.append(item["text"])
+            if isinstance(item, dict):
+                # Se è un blocco di thinking o signature, scartalo
+                if item.get("type") == "thinking" or "signature" in item:
+                    continue
+                if "text" in item:
+                    parts.append(item["text"])
             elif hasattr(item, "text"):
                 parts.append(item.text)
             else:
@@ -48,8 +52,26 @@ def extract_mcp_text(tool_output) -> str:
         return str(tool_output.content)
     return str(tool_output)
 
+def get_advisor_llm(model_id: str):
+    """Istanzia dinamicamente il modello richiesto."""
+    model_id_lower = model_id.lower()
+    if "claude" in model_id_lower:
+        api_key = os.getenv("ANTHROPIC_API_KEY")
+        return ChatAnthropic(
+            model_name=model_id,
+            api_key=api_key,
+            max_tokens=2048
+        )
+    else:
+        api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+        return ChatGoogleGenerativeAI(
+            model=model_id,
+            google_api_key=api_key,
+            temperature=0.0,
+            max_retries=5
+        )
+
 async def sre_advisor_node(state: ReconState, tools: list) -> dict:
- 
     user_input = interrupt("Inserisci una richiesta per l'SRE Advisor (o conferma a vuoto per uscire):")
     
     query = ""
@@ -71,18 +93,13 @@ async def sre_advisor_node(state: ReconState, tools: list) -> dict:
             "total_tokens": state.get("total_tokens", 0)
         }
 
-    print(f"\n-> [NODO 4: SRE ADVISOR] Elaborazione richiesta: '{query}'")
+    target_model = state.get("target_model") or "gemini-2.5-flash"
+    print(f"\n-> [NODO 4: SRE ADVISOR] Modello: '{target_model}' | Elaborazione richiesta: '{query}'")
     
-    api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
-        google_api_key=api_key,
-        temperature=0.2,
-        max_retries=5
-    )
+    llm = get_advisor_llm(target_model)
     
-    history_tools = [t for t in tools if t.name == "get_historical_metrics"]
-    llm_with_tools = llm.bind_tools(history_tools) if history_tools else llm
+    tools_map = {t.name: t for t in tools}
+    llm_with_tools = llm.bind_tools(tools) if tools else llm
     
     mapping = state.get("app_mapping", {})
     metrics = state.get("metrics_summary", {})
@@ -104,31 +121,40 @@ async def sre_advisor_node(state: ReconState, tools: list) -> dict:
     prompt_tokens = usage.get("input_tokens", 0)
     completion_tokens = usage.get("output_tokens", 0)
     
-    if response.tool_calls and history_tools:
-        target_tool = history_tools[0]
-        chat_messages.append(response)
+    if response.tool_calls and tools:
         
+        if isinstance(response.content, list):
+            clean_content = [b for b in response.content if isinstance(b, dict) and b.get("type") != "thinking"]
+            response_to_append = AIMessage(content=clean_content, tool_calls=response.tool_calls)
+        else:
+            response_to_append = response
+
+        chat_messages.append(response_to_append)
+
         for call in response.tool_calls:
-            if call["name"] == target_tool.name:
-                print(f"  [Advisor Tool Call] Consultazione storico: {call['args']}")
-                raw_out = await target_tool.ainvoke(call["args"])
+            tool_name = call.get("name")
+            if tool_name in tools_map:
+                print(f"  [Advisor Tool Call] Invocazione '{tool_name}': {call['args']}")
+                raw_out = await tools_map[tool_name].ainvoke(call["args"])
                 out_text = extract_mcp_text(raw_out)
-                
+            
                 chat_messages.append(
                     ToolMessage(
                         content=out_text,
-                        name=target_tool.name,
+                        name=tool_name,
                         tool_call_id=call["id"]
                     )
                 )
-        
-        response = await llm.ainvoke(chat_messages)
+            else:
+                print(f"  [Advisor Tool WARN] Tool richiesto non trovato: {tool_name}")
+            
+        response = await llm_with_tools.ainvoke(chat_messages)
         usage2 = getattr(response, "usage_metadata", None) or response.response_metadata.get("usage_metadata", {})
         prompt_tokens += usage2.get("input_tokens", 0)
         completion_tokens += usage2.get("output_tokens", 0)
 
     clean_text = extract_clean_text(response.content)
-    print(f"\n[Risposta SRE Advisor]:\n{clean_text}\n")
+    print(f"\n[Risposta SRE Advisor ({target_model})]:\n{clean_text}\n")
     
     return {
         "user_query": query,

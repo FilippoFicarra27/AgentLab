@@ -1,0 +1,12 @@
+{
+  "1": "Quale applicazione tra quelle monitorate assorbe il maggior rate di CPU, e quanti core impiega complessivamente?",
+  "2": "Qual è l'uso effettivo di memoria Working Set (in MB) dell'applicazione con il maggior numero di pod o repliche?",
+  "3": "Quale applicazione genera un flusso attivo di scrittura su disco e a quale rate scrive?",
+  "4": "Identifica l'applicazione con il maggior numero di repliche: elenca i relativi pod e indica quante repliche risultano attive.",
+  "5": "C'è qualche applicazione che presenta traffico di rete in ricezione superiore a 10 KB/s? Se sì, quale e a quale rate?",
+  "6": "Calcola un indice di interferenza normalizzato per ogni applicazione con la formula: 50% CPU, 25% Memoria (su 128MB) e 25% scrittura su Disco (su 1 MB/s). Quale applicazione ottiene il punteggio più alto?",
+  "7": "Seleziona l'applicazione che consuma più memoria e calcola la variazione percentuale della sua memoria nelle ultime 2 ore interrogando lo storico.",
+  "8": "Assumendo che l'applicazione a maggior carico di CPU abbia un limit di 300m per pod (600m totali su 2 repliche), calcola la percentuale di saturazione e valuta il rischio di throttling.",
+  "9": "Interroga Prometheus per verificare se ci sono stati riavvii imprevisti di container nel namespace default nell'ultima ora.",
+  "10": "Dobbiamo sottomettere un nuovo batch da 12 pod con vincolo critico di CPU. In base alle risorse attuali, accanto a quale applicazione è più sicuro collocarli e da quale devono essere isolati?"
+}

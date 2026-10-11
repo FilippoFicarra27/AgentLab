@@ -16,7 +16,8 @@ async def persister_node(state: ReconState, tools: list) -> dict:
     )
     
     mongo_tools = [t for t in tools if t.name == "save_metrics_to_mongodb"]
-    llm_with_tools = llm.bind_tools(mongo_tools, tool_choice="any")
+    # Modifica: rimosso tool_choice="any" incompatibile con Google GenAI
+    llm_with_tools = llm.bind_tools(mongo_tools)
     
     app_mapping = state.get("app_mapping", {})
     metrics_summary = state.get("metrics_summary", {})
@@ -64,7 +65,7 @@ async def persister_node(state: ReconState, tools: list) -> dict:
                 args = call["args"]
                 app_name = args.get("app_name")
                 
-                
+                # Fallback di consistenza se il modello omette parametri
                 if not args.get("metrics") and app_name in metrics_summary:
                     args["metrics"] = metrics_summary[app_name]
                 if not args.get("raw_prometheus_responses"):
