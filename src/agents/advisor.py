@@ -22,24 +22,44 @@ LINEE GUIDA PER L'USO DEI TOOL:
 """
 
 def extract_clean_text(content) -> str:
-    """Estrae esclusivamente i blocchi di testo, ignorando thinking o signature."""
+    """Estrae il testo pulito gestendo blocchi multipli, thinking e fallback."""
     if isinstance(content, str):
-        return content
+        return content.strip()
+        
     if isinstance(content, list):
-        parts = []
+        text_parts = []
+        thinking_parts = []
+        
         for item in content:
-            if isinstance(item, dict):
-                # Se è un blocco di thinking o signature, scartalo
-                if item.get("type") == "thinking" or "signature" in item:
-                    continue
-                if "text" in item:
-                    parts.append(item["text"])
+            if isinstance(item, str):
+                text_parts.append(item)
+            elif isinstance(item, dict):
+                # Se è esplicitamente testo
+                if item.get("type") == "text" and "text" in item:
+                    text_parts.append(item["text"])
+                elif "text" in item and item.get("type") != "thinking":
+                    text_parts.append(item["text"])
+                # Conserva il thinking come fallback di emergenza
+                elif item.get("type") == "thinking" or "thinking" in item:
+                    val = item.get("thinking") or item.get("text") or ""
+                    if isinstance(val, str) and val.strip():
+                        thinking_parts.append(val.strip())
             elif hasattr(item, "text"):
-                parts.append(item.text)
-            else:
-                parts.append(str(item))
-        return " ".join(parts).strip()
-    return str(content)
+                text_parts.append(item.text)
+            elif hasattr(item, "content"):
+                text_parts.append(str(item.content))
+                
+        cleaned = " ".join(text_parts).strip()
+        if cleaned:
+            return cleaned
+            
+        # Fallback: se il modello ha scritto la risposta solo nel blocco di reasoning
+        if thinking_parts:
+            return f"[Output da Reasoning]: {' '.join(thinking_parts)}"
+            
+        return "[Risposta priva di testo]"
+        
+    return str(content).strip()
 
 def extract_mcp_text(tool_output) -> str:
     if isinstance(tool_output, list) and len(tool_output) > 0:
