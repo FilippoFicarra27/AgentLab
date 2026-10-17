@@ -266,8 +266,10 @@ def main():
             "pods": len(pod_list),
             "cpu_cores": total_cpu,
             "memory_mb": total_mem_bytes / (1024 * 1024),
-            "disk_bps": total_disk_bps,
-            "net_bps": total_net_bps
+            "disk_write_bps": total_disk_bps,      
+            "network_rx_bps": total_net_bps,        
+            "disk_bps": total_disk_bps,             
+            "net_bps": total_net_bps                
         })
 
     top_cpu = max(app_stats, key=lambda x: x["cpu_cores"]) if app_stats else None
@@ -308,6 +310,10 @@ def main():
     print(f" Costo API / Token:       0 token (0.00$)")
     print(f" Dati salvati in MongoDB: {DB_NAME}.{COLLECTION_NAME}")
     print("=" * 60)
+
+    
+    metrics_summary = {s["app"]: s for s in app_stats}
+    return app_mapping, metrics_summary
 
 if __name__ == "__main__":
     main()

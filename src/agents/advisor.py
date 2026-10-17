@@ -19,6 +19,11 @@ LINEE GUIDA PER L'USO DEI TOOL:
 - Per domande sullo stato istantaneo attuale ricavabili dallo snapshot fornito, rispondi direttamente senza invocare tool.
 - Hai accesso all'intera suite di strumenti MCP (storico su database `get_historical_metrics`, query Prometheus `prom_query`, ispezione topologia, ecc.).
 - Se la richiesta richiede dati non presenti nello snapshot corrente — come serie temporali storiche, andamenti passati, o verifiche dirette di metriche non campionate (es. riavvii pod, eventi) — seleziona ed esegui autonomamente lo strumento più idoneo tra quelli forniti.
+Se per qualunque motivo non sei in grado di formulare una risposta conclusiva 
+(ad esempio per complessità del calcolo, ambiguità delle metriche o dati insufficienti), non 
+limitarti a dire "non posso rispondere perché mancano informazioni": dichiara chiaramente il 
+motivo dell'impossibilità e consiglia esplicitamente all'operatore di sottomettere la richiesta 
+a un modello più avanzato.
 """
 
 def extract_clean_text(content) -> str:
