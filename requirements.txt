@@ -5,6 +5,7 @@ langchain-google-genai
 google-genai
 langchain-mcp-adapters
 langchain-anthropic
+langchain-openai
 python-dotenv
 mcp
 pydantic
@@ -14,3 +15,5 @@ langgraph-cli[inmem]>=0.1.0
 langsmith>=0.1.0
 matplotlib
 numpy
+groq
+tabulate

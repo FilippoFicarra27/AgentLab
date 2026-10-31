@@ -5,6 +5,8 @@ from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage
 from langgraph.types import interrupt
 from src.state import ReconState
+from langchain_openai import ChatOpenAI
+
 
 ADVISOR_SYSTEM_PROMPT = """Sei un SRE Advisor esperto in Kubernetes. 
 Hai a disposizione l'istantanea esatta delle metriche raccolte e persistite sul database.
@@ -58,7 +60,7 @@ def extract_clean_text(content) -> str:
         if cleaned:
             return cleaned
             
-        # Fallback: se il modello ha scritto la risposta solo nel blocco di reasoning
+        
         if thinking_parts:
             return f"[Output da Reasoning]: {' '.join(thinking_parts)}"
             
@@ -78,14 +80,23 @@ def extract_mcp_text(tool_output) -> str:
     return str(tool_output)
 
 def get_advisor_llm(model_id: str):
-    """Istanzia dinamicamente il modello richiesto."""
+    """Istanzia dinamicamente il modello richiesto (Anthropic, OpenAI, Google)."""
     model_id_lower = model_id.lower()
+
     if "claude" in model_id_lower:
         api_key = os.getenv("ANTHROPIC_API_KEY")
         return ChatAnthropic(
             model_name=model_id,
             api_key=api_key,
             max_tokens=2048
+        )
+    elif "gpt" in model_id_lower:
+        api_key = os.getenv("OPENAI_API_KEY")
+        return ChatOpenAI(
+            model=model_id,
+            api_key=api_key,
+            temperature=0.0,
+            max_retries=5
         )
     else:
         api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")

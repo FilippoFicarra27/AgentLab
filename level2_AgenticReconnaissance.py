@@ -8,6 +8,7 @@ import textwrap
 import time
 from benchmark_script import deterministic_oracle_answer
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from evaluator_judge import valuta_con_groq_judge
 import requests
 from src.agents.advisor import (
     ADVISOR_SYSTEM_PROMPT,
@@ -18,6 +19,8 @@ from src.agents.advisor import (
 from src.graph import build_recon_graph
 from src.tools.mcp_manager import load_mcp_tools
 from tabulate import tabulate
+from cost_tracker import track_openai_call, get_budget_summary
+
 
 load_dotenv()
 
@@ -25,9 +28,11 @@ PROMETHEUS_URL = os.getenv("PROMETHEUS_URL", "http://127.0.0.1:9090")
 
 MODELS_TO_BENCHMARK = [
     {"name": "Gemini 2.5 Flash", "id": "gemini-2.5-flash"},
-    {"name": "Gemini 3.8 Flash", "id": "gemini-3.8-flash"},
+    {"name": "Gemini 3.6 Flash", "id": "gemini-3.6-flash"},
     {"name": "Claude Opus 5.5", "id": "claude-opus-5-5"},
     {"name": "Claude Sonnet 5.5", "id": "claude-sonnet-5-5"},
+    {"name": "GPT-4o Mini", "id": "gpt-4o-mini"},
+    {"name": "GPT-4o", "id": "gpt-4o"},
 ]
 
 
@@ -240,28 +245,22 @@ async def run():
     print("=" * 80)
     user_choice = await asyncio.to_thread(
         input,
-        "Scegli una domanda da sottomettere (1-10) oppure premi INVIO / altro"
-        " tasto per uscire: ",
+        "Scegli una domanda (es. 1, 1a, 1b ... fino a 10, 10a, 10b) oppure premi INVIO per uscire: ",
     )
-    user_choice = user_choice.strip()
+    user_choice = user_choice.strip().lower()
 
-    if not user_choice.isdigit():
-      print("\nInput non numerico o vuoto. Uscita dalla sessione.")
+    if not user_choice or user_choice not in q_map:
+      print("\nScelta non valida o uscita richiesta. Uscita dalla sessione.")
       break
 
-    q_num = int(user_choice)
-    if q_num < 1 or q_num > 10:
-      print(
-          f"\nIl numero {q_num} non è compreso tra 1 e 10. Uscita dalla"
-          " sessione."
-      )
-      break
+    q_key = user_choice
+    q_text = q_map[q_key]
 
-    q_key = str(q_num)
-    q_text = q_map.get(q_key, "")
+    
+    q_num = int("".join(filter(str.isdigit, q_key)))
 
     print("\n" + "-" * 110)
-    print(f"ESECUZIONE DOMANDA [Q{q_num}]: {q_text}")
+    print(f"ESECUZIONE DOMANDA [{q_key.upper()}]: {q_text}")
     print("-" * 110)
 
     t_script = time.perf_counter()
@@ -284,15 +283,21 @@ async def run():
         0,
         0,
         0,
+        "N/A",
         wrap_text(oracle_res),
     ]]
 
-    
     for res in llm_results:
       total_pipeline_lat = res["latency_sec"] + etl_duration
       total_pipeline_in = res["prompt_tokens"] + etl_in_tokens
       total_pipeline_out = res["completion_tokens"] + etl_out_tokens
       total_pipeline_all = res["total_tokens"] + etl_total_tokens
+
+      score_acc = valuta_con_groq_judge(
+          domanda=q_text,
+          ground_truth=oracle_res,
+          risposta_candidata=res["response"]
+      )
 
       rows.append([
           res["system"],
@@ -300,8 +305,23 @@ async def run():
           f"{res['prompt_tokens']}",
           f"{res['completion_tokens']}",
           f"{res['total_tokens']}",
+          f"{score_acc:.2f}",
           wrap_text(res["response"]),
       ])
+
+
+      
+      meta = next(
+            (m for m in MODELS_TO_BENCHMARK if m["name"] == res["system"]), None
+      )
+      if meta and ("gpt" in meta["id"].lower()):
+            track_openai_call(
+                model_id=meta["id"],
+                prompt_tokens=res["prompt_tokens"],
+                completion_tokens=res["completion_tokens"],
+                livello="L2",  # <--- CORRETTO IN L1
+                q_num=q_num,
+            )
 
     headers = [
         "Sistema",
@@ -309,9 +329,12 @@ async def run():
         "In Tok",
         "Out Tok",
         "Tot Tok ",
+        "Accuratezza",
         "Risposta Completa",
     ]
     print("\n" + tabulate(rows, headers=headers, tablefmt="fancy_grid"))
+    print("\n")
+    print(f"\n[BILLING MONITOR] {get_budget_summary()}\n")
     print("\n")
 
   print("\nBenchmark terminato.")
